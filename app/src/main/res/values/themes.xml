@@ -1,0 +1,39 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Theme.VCAM" parent="android:Theme.DeviceDefault.Light">
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
+    <style name="Theme.VCAM.Editor" parent="android:Theme.DeviceDefault">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@color/editor_background</item>
+        <item name="android:statusBarColor">@color/editor_background</item>
+        <item name="android:navigationBarColor">@color/editor_background</item>
+        <item name="android:colorAccent">@color/editor_accent</item>
+    </style>
+
+    <style name="EditorChip">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">32dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:minWidth">56dp</item>
+        <item name="android:paddingStart">14dp</item>
+        <item name="android:paddingEnd">14dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:button">@null</item>
+        <item name="android:background">@drawable/chip_bg</item>
+        <item name="android:textColor">@color/chip_text</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <style name="EditorLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">14dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
+        <item name="android:textColor">@color/editor_text_secondary</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.08</item>
+    </style>
+</resources>

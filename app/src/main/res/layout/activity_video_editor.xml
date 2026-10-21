@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/editor_background"
+    android:orientation="vertical">
+
+    <!-- Top bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="16dp">
+
+        <TextView
+            android:id="@+id/editor_close"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/editor_close"
+            android:gravity="center"
+            android:text="✕"
+            android:textColor="@color/white"
+            android:textSize="20sp" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/editor_title"
+                android:textColor="@color/white"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/editor_source_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="middle"
+                android:singleLine="true"
+                android:textColor="@color/editor_text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Preview with crop overlay -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="16dp">
+
+        <com.codegv.android.vcam.editor.AspectFrameLayout
+            android:id="@+id/editor_preview_frame"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center">
+
+            <com.codegv.android.vcam.editor.VideoPlayerView
+                android:id="@+id/editor_player"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <com.codegv.android.vcam.editor.CropOverlayView
+                android:id="@+id/editor_crop"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </com.codegv.android.vcam.editor.AspectFrameLayout>
+    </FrameLayout>
+
+    <!-- Controls -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/editor_surface"
+        android:orientation="vertical"
+        android:paddingStart="16dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/editor_play"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/editor_play"
+                android:src="@android:drawable/ic_media_play" />
+
+            <TextView
+                android:id="@+id/editor_time"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:fontFamily="monospace"
+                android:textColor="@color/white"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/editor_selection"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/editor_accent"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <com.codegv.android.vcam.editor.TrimBarView
+            android:id="@+id/editor_trim"
+            android:layout_width="match_parent"
+            android:layout_height="56dp" />
+
+        <TextView
+            style="@style/EditorLabel"
+            android:text="@string/editor_aspect" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none">
+
+            <RadioGroup
+                android:id="@+id/editor_aspect_group"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <RadioButton
+                    android:id="@+id/aspect_original"
+                    style="@style/EditorChip"
+                    android:checked="true"
+                    android:text="@string/editor_aspect_original" />
+
+                <RadioButton
+                    android:id="@+id/aspect_free"
+                    style="@style/EditorChip"
+                    android:text="@string/editor_aspect_free" />
+
+                <RadioButton
+                    android:id="@+id/aspect_1_1"
+                    style="@style/EditorChip"
+                    android:text="1:1" />
+
+                <RadioButton
+                    android:id="@+id/aspect_4_3"
+                    style="@style/EditorChip"
+                    android:text="4:3" />
+
+                <RadioButton
+                    android:id="@+id/aspect_3_4"
+                    style="@style/EditorChip"
+                    android:text="3:4" />
+
+                <RadioButton
+                    android:id="@+id/aspect_16_9"
+                    style="@style/EditorChip"
+                    android:text="16:9" />
+
+                <RadioButton
+                    android:id="@+id/aspect_9_16"
+                    style="@style/EditorChip"
+                    android:text="9:16" />
+            </RadioGroup>
+        </HorizontalScrollView>
+
+        <TextView
+            style="@style/EditorLabel"
+            android:text="@string/editor_resolution" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <RadioGroup
+                android:id="@+id/editor_quality_group"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <RadioButton
+                    android:id="@+id/quality_480"
+                    style="@style/EditorChip"
+                    android:text="480p" />
+
+                <RadioButton
+                    android:id="@+id/quality_720"
+                    style="@style/EditorChip"
+                    android:checked="true"
+                    android:text="720p" />
+
+                <RadioButton
+                    android:id="@+id/quality_1080"
+                    style="@style/EditorChip"
+                    android:text="1080p" />
+            </RadioGroup>
+
+            <TextView
+                android:id="@+id/editor_output_size"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="end"
+                android:textColor="@color/white"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <CheckBox
+            android:id="@+id/editor_keep_audio"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:checked="true"
+            android:text="@string/editor_keep_audio"
+            android:textColor="@color/white" />
+
+        <CheckBox
+            android:id="@+id/editor_rotate_180"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/editor_rotate_180"
+            android:textColor="@color/white" />
+
+        <Button
+            android:id="@+id/editor_apply"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/btn_primary"
+            android:stateListAnimator="@null"
+            android:text="@string/editor_apply"
+            android:textAllCaps="false"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+</LinearLayout>
