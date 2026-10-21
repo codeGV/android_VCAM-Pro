@@ -4,15 +4,15 @@
     "type": "APK",
     "kind": "Directory"
   },
-  "applicationId": "com.example.vcam",
+  "applicationId": "com.codegv.android.vcam",
   "variantName": "release",
   "elements": [
     {
       "type": "SINGLE",
       "filters": [],
       "attributes": [],
-      "versionCode": 28,
-      "versionName": "4.4",
+      "versionCode": 29,
+      "versionName": "1.1",
       "outputFile": "app-release.apk"
     }
   ],

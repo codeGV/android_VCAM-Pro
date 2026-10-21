@@ -139,7 +139,7 @@ public class MainActivity extends Activity {
 
         repo_button.setOnClickListener(v -> {
 
-            Uri uri = Uri.parse("https://github.com/w2016561536/android_virtual_cam");
+            Uri uri = Uri.parse("https://github.com/codeGV/android_VCAM-Pro");
             Intent intent = new Intent(Intent.ACTION_VIEW, uri);
             startActivity(intent);
         });
