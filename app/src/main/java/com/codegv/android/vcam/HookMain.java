@@ -18,6 +18,7 @@ import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.InputConfiguration;
 import android.hardware.camera2.params.OutputConfiguration;
 import android.hardware.camera2.params.SessionConfiguration;
+import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.os.Build;
 import android.os.Environment;
@@ -37,6 +38,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadLocalRandom;
+
+import com.codegv.android.vcam.editor.PreviewCompositor;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
@@ -72,6 +75,9 @@ public class HookMain implements IXposedHookLoadPackage {
     // Size the app configured on its own preview SurfaceTexture (its real camera preview size).
     public int c2_preview_width = 0;
     public int c2_preview_height = 0;
+    // virtual.mp4's own size, so we can stop the app stretching it into another aspect.
+    public int c2_video_width = 0;
+    public int c2_video_height = 0;
     // Camera2 StateCallback classes we already hooked; re-hooking the same class on
     // every openCamera stacks duplicate hooks and rebuilds the dummy surface in a loop.
     public static final Set<Class> c2_hooked_classes = new HashSet<>();
@@ -88,6 +94,10 @@ public class HookMain implements IXposedHookLoadPackage {
     public static Surface c2_reader_Surfcae_1;
     public static MediaPlayer c2_player;
     public static MediaPlayer c2_player_1;
+    public static PreviewCompositor c2_compositor;
+    public static PreviewCompositor c2_compositor_1;
+    public static Surface c2_compositor_target;
+    public static Surface c2_compositor_target_1;
     public static Surface c2_virtual_surface;
     public static SurfaceTexture c2_virtual_surfaceTexture;
     public boolean need_recreate;
@@ -614,9 +624,19 @@ public class HookMain implements IXposedHookLoadPackage {
                 Surface rm_surf = (Surface) param.args[0];
                 if (rm_surf.equals(c2_preview_Surfcae)) {
                     c2_preview_Surfcae = null;
+                    if (c2_compositor != null) {
+                        c2_compositor.stop();
+                        c2_compositor = null;
+                        c2_compositor_target = null;
+                    }
                 }
                 if (rm_surf.equals(c2_preview_Surfcae_1)) {
                     c2_preview_Surfcae_1 = null;
+                    if (c2_compositor_1 != null) {
+                        c2_compositor_1.stop();
+                        c2_compositor_1 = null;
+                        c2_compositor_target_1 = null;
+                    }
                 }
                 if (rm_surf.equals(c2_reader_Surfcae_1)) {
                     c2_reader_Surfcae_1 = null;
@@ -771,59 +791,57 @@ public class HookMain implements IXposedHookLoadPackage {
 
 
         if (c2_preview_Surfcae != null) {
-            if (c2_player == null) {
-                c2_player = new MediaPlayer();
-            } else {
-                c2_player.release();
-                c2_player = new MediaPlayer();
-            }
-            c2_player.setSurface(c2_preview_Surfcae);
-            File sfile = new File(Environment.getExternalStorageDirectory().getPath() + "/DCIM/Camera1/" + "no-silent.jpg");
-            if (!sfile.exists()) {
-                c2_player.setVolume(0, 0);
-            }
-            c2_player.setLooping(true);
-
-            try {
-                c2_player.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
-                    public void onPrepared(MediaPlayer mp) {
-                        c2_player.start();
-                    }
-                });
-                c2_player.setDataSource(video_path + "virtual.mp4");
-                c2_player.prepare();
-            } catch (Exception e) {
-                XposedBridge.log("[VCAM] [c2player][" + c2_preview_Surfcae.toString() + "]" + e);
+            loadVideoSize();
+            if (c2_video_width > 0 && c2_video_height > 0
+                    && (c2_compositor == null || c2_compositor_target != c2_preview_Surfcae)) {
+                if (c2_compositor != null) {
+                    c2_compositor.stop();
+                    c2_compositor = null;
+                }
+                c2_compositor = new PreviewCompositor(c2_preview_Surfcae, video_path + "virtual.mp4");
+                c2_compositor_target = c2_preview_Surfcae;
             }
         }
 
         if (c2_preview_Surfcae_1 != null) {
-            if (c2_player_1 == null) {
-                c2_player_1 = new MediaPlayer();
-            } else {
-                c2_player_1.release();
-                c2_player_1 = new MediaPlayer();
-            }
-            c2_player_1.setSurface(c2_preview_Surfcae_1);
-            File sfile = new File(Environment.getExternalStorageDirectory().getPath() + "/DCIM/Camera1/" + "no-silent.jpg");
-            if (!sfile.exists()) {
-                c2_player_1.setVolume(0, 0);
-            }
-            c2_player_1.setLooping(true);
-
-            try {
-                c2_player_1.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
-                    public void onPrepared(MediaPlayer mp) {
-                        c2_player_1.start();
-                    }
-                });
-                c2_player_1.setDataSource(video_path + "virtual.mp4");
-                c2_player_1.prepare();
-            } catch (Exception e) {
-                XposedBridge.log("[VCAM] [c2player1]" + "[ " + c2_preview_Surfcae_1.toString() + "]" + e);
+            loadVideoSize();
+            if (c2_video_width > 0 && c2_video_height > 0
+                    && (c2_compositor_1 == null || c2_compositor_target_1 != c2_preview_Surfcae_1)) {
+                if (c2_compositor_1 != null) {
+                    c2_compositor_1.stop();
+                    c2_compositor_1 = null;
+                }
+                c2_compositor_1 = new PreviewCompositor(c2_preview_Surfcae_1, video_path + "virtual.mp4");
+                c2_compositor_target_1 = c2_preview_Surfcae_1;
             }
         }
         XposedBridge.log("[VCAM] Camera2 processing fully executed");
+    }
+
+    /** Reads virtual.mp4's display size once, so the preview is not stretched. */
+    private void loadVideoSize() {
+        if (c2_video_width > 0 || toast_content == null) {
+            return;
+        }
+        MediaMetadataRetriever r = new MediaMetadataRetriever();
+        try {
+            r.setDataSource(video_path + "virtual.mp4");
+            int w = Integer.parseInt(r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));
+            int h = Integer.parseInt(r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
+            String rot = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
+            if (rot != null && Integer.parseInt(rot) % 180 != 0) {
+                int t = w;
+                w = h;
+                h = t;
+            }
+            c2_video_width = w;
+            c2_video_height = h;
+            XposedBridge.log("[VCAM] video size: " + w + "x" + h);
+        } catch (Exception e) {
+            XposedBridge.log("[VCAM] [video-size] " + e);
+        } finally {
+            try { r.release(); } catch (Exception ignored) { }
+        }
     }
 
     private Surface create_virtual_surface() {
@@ -870,6 +888,16 @@ public class HookMain implements IXposedHookLoadPackage {
             protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                 need_recreate = true;
                 create_virtual_surface();
+                if (c2_compositor != null) {
+                    c2_compositor.stop();
+                    c2_compositor = null;
+                    c2_compositor_target = null;
+                }
+                if (c2_compositor_1 != null) {
+                    c2_compositor_1.stop();
+                    c2_compositor_1 = null;
+                    c2_compositor_target_1 = null;
+                }
                 if (c2_player != null) {
                     c2_player.stop();
                     c2_player.reset();
