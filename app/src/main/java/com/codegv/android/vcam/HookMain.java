@@ -305,6 +305,21 @@ public class HookMain implements IXposedHookLoadPackage {
                             } catch (Exception ee) {
                                 XposedBridge.log("[VCAM] [permission-check]" + ee.toString());
                             }
+                            if (Build.VERSION.SDK_INT >= 33) {
+                                // Android 13+ never grants READ_EXTERNAL_STORAGE; media access is split
+                                // per type. Without these, every app reads as unprivileged and gets
+                                // redirected to its private Camera1 dir, so virtual.mp4 is never found.
+                                try {
+                                    auth_statue += (toast_content.checkSelfPermission("android.permission.READ_MEDIA_VIDEO") + 1);
+                                } catch (Exception ee) {
+                                    XposedBridge.log("[VCAM] [permission-check]" + ee.toString());
+                                }
+                                try {
+                                    auth_statue += (toast_content.checkSelfPermission("android.permission.READ_MEDIA_IMAGES") + 1);
+                                } catch (Exception ee) {
+                                    XposedBridge.log("[VCAM] [permission-check]" + ee.toString());
+                                }
+                            }
                             try {
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                     auth_statue += (toast_content.checkSelfPermission(Manifest.permission.MANAGE_EXTERNAL_STORAGE) + 1);
@@ -317,8 +332,9 @@ public class HookMain implements IXposedHookLoadPackage {
                                 auth_statue = 2;
                             }
                         }
-                        // permission check done
-                        if (auth_statue < 1 || force_private.exists()) {
+                        // permission check done; trust the shared dir if this app can already read the file
+                        File shared_file = new File(Environment.getExternalStorageDirectory().getPath() + "/DCIM/Camera1/" + "virtual.mp4");
+                        if ((auth_statue < 1 && !shared_file.canRead()) || force_private.exists()) {
                             File shown_file = new File(toast_content.getExternalFilesDir(null).getAbsolutePath() + "/Camera1/");
                             if ((!shown_file.isDirectory()) && shown_file.exists()) {
                                 shown_file.delete();
