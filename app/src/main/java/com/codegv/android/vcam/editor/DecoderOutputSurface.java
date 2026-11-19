@@ -58,6 +58,11 @@ class DecoderOutputSurface implements SurfaceTexture.OnFrameAvailableListener {
      * @param flip180  additionally turn the cropped output upside down
      */
     DecoderOutputSurface(RectF crop, int rotation, boolean flip180) {
+        this(crop, rotation, flip180, new RectF(-1f, -1f, 1f, 1f));
+    }
+
+    /** @param dest where the drawn frame lands in the output buffer, NDC (left, bottom, right, top). */
+    DecoderOutputSurface(RectF crop, int rotation, boolean flip180, RectF dest) {
         program = createProgram();
         aPositionLoc = GLES20.glGetAttribLocation(program, "aPosition");
         aTextureCoordLoc = GLES20.glGetAttribLocation(program, "aTextureCoord");
@@ -80,16 +85,18 @@ class DecoderOutputSurface implements SurfaceTexture.OnFrameAvailableListener {
         surfaceTexture.setOnFrameAvailableListener(this, new Handler(callbackThread.getLooper()));
         surface = new Surface(surfaceTexture);
 
-        vertices = buildQuad(crop, rotation, flip180);
+        vertices = buildQuad(crop, rotation, flip180, dest);
     }
 
     /**
      * Triangle strip: BL, BR, TL, TR of the output. Each vertex carries the source
      * texture coordinate that should land there after crop + rotation.
      */
-    private static FloatBuffer buildQuad(RectF crop, int rotation, boolean flip180) {
+    private static FloatBuffer buildQuad(RectF crop, int rotation, boolean flip180, RectF dest) {
         float[][] corners = {{0, 1}, {1, 1}, {0, 0}, {1, 0}}; // output (u, v), v down
-        float[][] ndc = {{-1, -1}, {1, -1}, {-1, 1}, {1, 1}};
+        float[][] ndc = {
+                {dest.left, dest.bottom}, {dest.right, dest.bottom},
+                {dest.left, dest.top}, {dest.right, dest.top}};
         float[] data = new float[4 * 4];
         for (int i = 0; i < 4; i++) {
             float cu = flip180 ? 1 - corners[i][0] : corners[i][0];

@@ -20,12 +20,19 @@ class CodecInputSurface {
     private EGLContext context = EGL14.EGL_NO_CONTEXT;
     private EGLSurface eglSurface = EGL14.EGL_NO_SURFACE;
     private Surface surface;
+    private final boolean ownSurface;
 
     CodecInputSurface(Surface surface) {
+        this(surface, true);
+    }
+
+    /** @param ownSurface false when the Surface belongs to the host app and must not be released. */
+    CodecInputSurface(Surface surface, boolean ownSurface) {
         if (surface == null) {
             throw new NullPointerException("surface");
         }
         this.surface = surface;
+        this.ownSurface = ownSurface;
 
         display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY);
         if (display == EGL14.EGL_NO_DISPLAY) {
@@ -71,6 +78,15 @@ class CodecInputSurface {
         return EGL14.eglSwapBuffers(display, eglSurface);
     }
 
+    /** {width, height} of the wrapped EGL window surface. */
+    int[] getSurfaceSize() {
+        int[] w = new int[1];
+        int[] h = new int[1];
+        EGL14.eglQuerySurface(display, eglSurface, EGL14.EGL_WIDTH, w, 0);
+        EGL14.eglQuerySurface(display, eglSurface, EGL14.EGL_HEIGHT, h, 0);
+        return new int[]{Math.max(1, w[0]), Math.max(1, h[0])};
+    }
+
     void setPresentationTime(long nsecs) {
         EGLExt.eglPresentationTimeANDROID(display, eglSurface, nsecs);
     }
@@ -83,7 +99,7 @@ class CodecInputSurface {
             EGL14.eglReleaseThread();
             EGL14.eglTerminate(display);
         }
-        if (surface != null) {
+        if (surface != null && ownSurface) {
             surface.release();
         }
         display = EGL14.EGL_NO_DISPLAY;

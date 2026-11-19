@@ -18,6 +18,7 @@ import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.InputConfiguration;
 import android.hardware.camera2.params.OutputConfiguration;
 import android.hardware.camera2.params.SessionConfiguration;
+import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.os.Build;
 import android.os.Environment;
@@ -32,9 +33,13 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadLocalRandom;
+
+import com.codegv.android.vcam.editor.PreviewCompositor;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
@@ -67,6 +72,15 @@ public class HookMain implements IXposedHookLoadPackage {
     public static Camera mcamera1;
     public int imageReaderFormat = 0;
     public static boolean is_first_hook_build = true;
+    // Size the app configured on its own preview SurfaceTexture (its real camera preview size).
+    public int c2_preview_width = 0;
+    public int c2_preview_height = 0;
+    // virtual.mp4's own size, so we can stop the app stretching it into another aspect.
+    public int c2_video_width = 0;
+    public int c2_video_height = 0;
+    // Camera2 StateCallback classes we already hooked; re-hooking the same class on
+    // every openCamera stacks duplicate hooks and rebuilds the dummy surface in a loop.
+    public static final Set<Class> c2_hooked_classes = new HashSet<>();
 
     public static int onemhight;
     public static int onemwidth;
@@ -80,6 +94,10 @@ public class HookMain implements IXposedHookLoadPackage {
     public static Surface c2_reader_Surfcae_1;
     public static MediaPlayer c2_player;
     public static MediaPlayer c2_player_1;
+    public static PreviewCompositor c2_compositor;
+    public static PreviewCompositor c2_compositor_1;
+    public static Surface c2_compositor_target;
+    public static Surface c2_compositor_target_1;
     public static Surface c2_virtual_surface;
     public static SurfaceTexture c2_virtual_surfaceTexture;
     public boolean need_recreate;
@@ -305,6 +323,21 @@ public class HookMain implements IXposedHookLoadPackage {
                             } catch (Exception ee) {
                                 XposedBridge.log("[VCAM] [permission-check]" + ee.toString());
                             }
+                            if (Build.VERSION.SDK_INT >= 33) {
+                                // Android 13+ never grants READ_EXTERNAL_STORAGE; media access is split
+                                // per type. Without these, every app reads as unprivileged and gets
+                                // redirected to its private Camera1 dir, so virtual.mp4 is never found.
+                                try {
+                                    auth_statue += (toast_content.checkSelfPermission("android.permission.READ_MEDIA_VIDEO") + 1);
+                                } catch (Exception ee) {
+                                    XposedBridge.log("[VCAM] [permission-check]" + ee.toString());
+                                }
+                                try {
+                                    auth_statue += (toast_content.checkSelfPermission("android.permission.READ_MEDIA_IMAGES") + 1);
+                                } catch (Exception ee) {
+                                    XposedBridge.log("[VCAM] [permission-check]" + ee.toString());
+                                }
+                            }
                             try {
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                     auth_statue += (toast_content.checkSelfPermission(Manifest.permission.MANAGE_EXTERNAL_STORAGE) + 1);
@@ -317,8 +350,9 @@ public class HookMain implements IXposedHookLoadPackage {
                                 auth_statue = 2;
                             }
                         }
-                        // permission check done
-                        if (auth_statue < 1 || force_private.exists()) {
+                        // permission check done; trust the shared dir if this app can already read the file
+                        File shared_file = new File(Environment.getExternalStorageDirectory().getPath() + "/DCIM/Camera1/" + "virtual.mp4");
+                        if ((auth_statue < 1 && !shared_file.canRead()) || force_private.exists()) {
                             File shown_file = new File(toast_content.getExternalFilesDir(null).getAbsolutePath() + "/Camera1/");
                             if ((!shown_file.isDirectory()) && shown_file.exists()) {
                                 shown_file.delete();
@@ -590,9 +624,19 @@ public class HookMain implements IXposedHookLoadPackage {
                 Surface rm_surf = (Surface) param.args[0];
                 if (rm_surf.equals(c2_preview_Surfcae)) {
                     c2_preview_Surfcae = null;
+                    if (c2_compositor != null) {
+                        c2_compositor.stop();
+                        c2_compositor = null;
+                        c2_compositor_target = null;
+                    }
                 }
                 if (rm_surf.equals(c2_preview_Surfcae_1)) {
                     c2_preview_Surfcae_1 = null;
+                    if (c2_compositor_1 != null) {
+                        c2_compositor_1.stop();
+                        c2_compositor_1 = null;
+                        c2_compositor_target_1 = null;
+                    }
                 }
                 if (rm_surf.equals(c2_reader_Surfcae_1)) {
                     c2_reader_Surfcae_1 = null;
@@ -680,6 +724,19 @@ public class HookMain implements IXposedHookLoadPackage {
         });
 
 
+        XposedHelpers.findAndHookMethod("android.graphics.SurfaceTexture", lpparam.classLoader, "setDefaultBufferSize", int.class, int.class, new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                // Our own dummy surface call; keep the app's real preview size.
+                if (param.thisObject == c2_virtual_surfaceTexture) {
+                    return;
+                }
+                c2_preview_width = (int) param.args[0];
+                c2_preview_height = (int) param.args[1];
+                XposedBridge.log("[VCAM] app preview size: " + c2_preview_width + "x" + c2_preview_height);
+            }
+        });
+
         XposedHelpers.findAndHookMethod("android.hardware.camera2.CameraCaptureSession.CaptureCallback", lpparam.classLoader, "onCaptureFailed", CameraCaptureSession.class, CaptureRequest.class, CaptureFailure.class,
                 new XC_MethodHook() {
                     @Override
@@ -734,59 +791,57 @@ public class HookMain implements IXposedHookLoadPackage {
 
 
         if (c2_preview_Surfcae != null) {
-            if (c2_player == null) {
-                c2_player = new MediaPlayer();
-            } else {
-                c2_player.release();
-                c2_player = new MediaPlayer();
-            }
-            c2_player.setSurface(c2_preview_Surfcae);
-            File sfile = new File(Environment.getExternalStorageDirectory().getPath() + "/DCIM/Camera1/" + "no-silent.jpg");
-            if (!sfile.exists()) {
-                c2_player.setVolume(0, 0);
-            }
-            c2_player.setLooping(true);
-
-            try {
-                c2_player.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
-                    public void onPrepared(MediaPlayer mp) {
-                        c2_player.start();
-                    }
-                });
-                c2_player.setDataSource(video_path + "virtual.mp4");
-                c2_player.prepare();
-            } catch (Exception e) {
-                XposedBridge.log("[VCAM] [c2player][" + c2_preview_Surfcae.toString() + "]" + e);
+            loadVideoSize();
+            if (c2_video_width > 0 && c2_video_height > 0
+                    && (c2_compositor == null || c2_compositor_target != c2_preview_Surfcae)) {
+                if (c2_compositor != null) {
+                    c2_compositor.stop();
+                    c2_compositor = null;
+                }
+                c2_compositor = new PreviewCompositor(c2_preview_Surfcae, video_path + "virtual.mp4");
+                c2_compositor_target = c2_preview_Surfcae;
             }
         }
 
         if (c2_preview_Surfcae_1 != null) {
-            if (c2_player_1 == null) {
-                c2_player_1 = new MediaPlayer();
-            } else {
-                c2_player_1.release();
-                c2_player_1 = new MediaPlayer();
-            }
-            c2_player_1.setSurface(c2_preview_Surfcae_1);
-            File sfile = new File(Environment.getExternalStorageDirectory().getPath() + "/DCIM/Camera1/" + "no-silent.jpg");
-            if (!sfile.exists()) {
-                c2_player_1.setVolume(0, 0);
-            }
-            c2_player_1.setLooping(true);
-
-            try {
-                c2_player_1.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
-                    public void onPrepared(MediaPlayer mp) {
-                        c2_player_1.start();
-                    }
-                });
-                c2_player_1.setDataSource(video_path + "virtual.mp4");
-                c2_player_1.prepare();
-            } catch (Exception e) {
-                XposedBridge.log("[VCAM] [c2player1]" + "[ " + c2_preview_Surfcae_1.toString() + "]" + e);
+            loadVideoSize();
+            if (c2_video_width > 0 && c2_video_height > 0
+                    && (c2_compositor_1 == null || c2_compositor_target_1 != c2_preview_Surfcae_1)) {
+                if (c2_compositor_1 != null) {
+                    c2_compositor_1.stop();
+                    c2_compositor_1 = null;
+                }
+                c2_compositor_1 = new PreviewCompositor(c2_preview_Surfcae_1, video_path + "virtual.mp4");
+                c2_compositor_target_1 = c2_preview_Surfcae_1;
             }
         }
         XposedBridge.log("[VCAM] Camera2 processing fully executed");
+    }
+
+    /** Reads virtual.mp4's display size once, so the preview is not stretched. */
+    private void loadVideoSize() {
+        if (c2_video_width > 0 || toast_content == null) {
+            return;
+        }
+        MediaMetadataRetriever r = new MediaMetadataRetriever();
+        try {
+            r.setDataSource(video_path + "virtual.mp4");
+            int w = Integer.parseInt(r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));
+            int h = Integer.parseInt(r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
+            String rot = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
+            if (rot != null && Integer.parseInt(rot) % 180 != 0) {
+                int t = w;
+                w = h;
+                h = t;
+            }
+            c2_video_width = w;
+            c2_video_height = h;
+            XposedBridge.log("[VCAM] video size: " + w + "x" + h);
+        } catch (Exception e) {
+            XposedBridge.log("[VCAM] [video-size] " + e);
+        } finally {
+            try { r.release(); } catch (Exception ignored) { }
+        }
     }
 
     private Surface create_virtual_surface() {
@@ -800,6 +855,14 @@ public class HookMain implements IXposedHookLoadPackage {
                 c2_virtual_surface = null;
             }
             c2_virtual_surfaceTexture = new SurfaceTexture(15);
+            // The camera rejects a session whose output surface has no size, which shows up
+            // as an endless createCaptureSession/onConfigureFailed retry loop. Use the size
+            // the app previews at, falling back to the ImageReader size (default 1280x720).
+            int dummy_w = c2_preview_width > 0 ? c2_preview_width : c2_ori_width;
+            int dummy_h = c2_preview_height > 0 ? c2_preview_height : c2_ori_height;
+            if (dummy_w > 0 && dummy_h > 0) {
+                c2_virtual_surfaceTexture.setDefaultBufferSize(dummy_w, dummy_h);
+            }
             c2_virtual_surface = new Surface(c2_virtual_surfaceTexture);
             need_recreate = false;
         } else {
@@ -814,11 +877,27 @@ public class HookMain implements IXposedHookLoadPackage {
 
     private void process_camera2_init(Class hooked_class) {
 
+        synchronized (c2_hooked_classes) {
+            if (hooked_class == null || !c2_hooked_classes.add(hooked_class)) {
+                return;
+            }
+        }
+
         XposedHelpers.findAndHookMethod(hooked_class, "onOpened", CameraDevice.class, new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                 need_recreate = true;
                 create_virtual_surface();
+                if (c2_compositor != null) {
+                    c2_compositor.stop();
+                    c2_compositor = null;
+                    c2_compositor_target = null;
+                }
+                if (c2_compositor_1 != null) {
+                    c2_compositor_1.stop();
+                    c2_compositor_1 = null;
+                    c2_compositor_target_1 = null;
+                }
                 if (c2_player != null) {
                     c2_player.stop();
                     c2_player.reset();
